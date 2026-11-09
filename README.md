@@ -36,6 +36,7 @@ can decrypt it.
 - [Everyday use](#everyday-use)
 - [Backups and moving to another key](#backups-and-moving-to-another-key)
 - [Several keys at once](#several-keys-at-once)
+- [Firefox autofill](#firefox-autofill)
 - [Security model](#security-model)
 - [How it works (technical)](#how-it-works-technical)
 - [Troubleshooting](#troubleshooting)
@@ -61,6 +62,9 @@ can decrypt it.
   merge it later.
 - **Simple manager.** Entries with title, username, password, URL and notes; search;
   a password generator; copy username / password / URL with one click.
+- **Fills logins in Firefox.** With the FidoParole extension, Firefox offers the logins
+  whose website matches the page and fills the one you pick, while the vault is
+  unlocked in the app (Windows, Linux including snap and Flatpak Firefox, macOS).
 
 ## What you need
 
@@ -190,6 +194,66 @@ Hover a key for all details. If two keys still look the same, **Touch to pick** 
 every listed key blink and selects the one you touch. It is available in the key
 list, the copy dialog and the reconnect dialog.
 
+## Firefox autofill
+
+The FidoParole extension for Firefox fills logins from the vault that is open in the
+app. Firefox gives extensions no USB access, so the extension never talks to the key:
+it asks the running app, through a small relay program (`fidoparole-bridge`) that
+Firefox starts. The PIN, the touch and the decrypted vault stay in the app.
+
+```
+Firefox extension ──native messaging──▶ fidoparole-bridge ──local pipe / socket──▶ FidoParole app
+```
+
+### Setting it up
+
+1. **Keep the relay next to the app.** The build puts `fidoparole-bridge` (`.exe` on
+   Windows) in the same folder as FidoParole.
+2. **Install the extension** from `firefox-extension/` (see
+   [its README](firefox-extension/README.md) for loading it during development and for
+   a signed, permanent install).
+3. **In the app:** gear icon → *Firefox autofill*. Press **Register with Firefox**, tick
+   **Let the Firefox extension fill logins**, press *Apply*. Registering tells Firefox
+   where the relay is; do it again if you move the app's folder.
+4. **Unlock a vault**, open a login page in Firefox and click the FidoParole button in
+   the toolbar (or press **Alt+Shift+F**). Pick a login: Firefox fills the username and
+   password. If only one login matches, the shortcut fills it right away. Nothing is
+   submitted for you.
+
+Each fill shows a short notice in the app (*Firefox: filled “GitHub” on github.com*).
+
+### Which logins are offered
+
+An entry is offered when its **Website** field matches the page:
+
+- the same host, or a subdomain of it (`github.com` also covers `gist.github.com`); a
+  leading `www.` in the entry is ignored;
+- an entry without `https://` or `http://` counts as `https://`;
+- an `https` entry is never filled into an `http` page;
+- IP addresses and names without a dot (`192.168.1.1`, `localhost`) must match
+  exactly, and a port written in the entry must match too.
+
+Entries without a website are never offered. Look-alike domains (`github.com.evil.io`,
+`evilgithub.com`) get nothing. The app checks the match again when the password is
+requested.
+
+### Firefox builds
+
+| Firefox | What happens |
+|---|---|
+| Windows | Registered under `HKCU\Software\Mozilla\NativeMessagingHosts`. Works with the app running as administrator, as long as it was elevated from **your own** account. |
+| Linux: distribution package, Mozilla tarball | Registered in `~/.mozilla/native-messaging-hosts/`. |
+| Linux: snap (Ubuntu's default) | Uses the same registration. Firefox starts the relay outside the snap through the desktop portal and asks once for permission. |
+| Linux: Flatpak (`org.mozilla.firefox`) | Firefox runs the relay **inside** its sandbox. *Register* copies it into `~/.var/app/org.mozilla.firefox/data/fidoparole/` and registers it in the sandbox's own `~/.mozilla`. The app answers on a socket in `$XDG_RUNTIME_DIR/app/org.mozilla.firefox/`, a folder Flatpak shares with the sandbox, so no `flatpak override` is needed. The relay must be the static (musl) build; the settings warn if it isn't. The app refreshes the copy each time it starts. |
+| macOS | Registered in `~/Library/Application Support/Mozilla/NativeMessagingHosts/`. |
+
+### Limits of autofill
+
+- Fill only: new or changed passwords are not saved from the browser. Add them in the app.
+- Login forms inside frames from another site (some banks, single sign-on widgets) are
+  not filled; only the page itself and frames of the same origin are.
+- Firefox only. Of the Flatpak builds, only Mozilla's `org.mozilla.firefox` is set up.
+
 ## Security model
 
 **Protected against**
@@ -207,6 +271,9 @@ list, the copy dialog and the reconnect dialog.
   screen, the clipboard or process memory, or capture the PIN as you type it. No
   password manager can fully defend against that.
 - Losing the key **and** every copy and backup. Keep a backup.
+- With **Firefox autofill** turned on and the vault unlocked, any program running as
+  your user can ask the app for a site's password, just as it could read it from
+  Firefox. Each fill shows a notice in the app. Autofill is off until you turn it on.
 
 **Inside the app**
 
@@ -220,6 +287,12 @@ list, the copy dialog and the reconnect dialog.
   getting the same hmac-secret back.
 - All key operations run one at a time, so two writes can never interleave on the
   key's shared largeBlob storage.
+- *Firefox autofill:* the app answers only your own user, over a Windows named pipe
+  restricted to your account and SYSTEM (remote clients refused) or a Unix socket in a
+  `0700` folder with a peer-uid check. Firefox only receives the logins that match
+  the page, and a password only when you pick that login; the extension stores
+  nothing. Asking which logins exist does not count as activity, so browsing alone
+  never keeps the vault from auto-locking.
 
 ## How it works (technical)
 
@@ -261,8 +334,19 @@ that name because they are part of the on-key and backup formats. Changing them 
 make existing vaults unreadable. In key-management tools, vault credentials appear
 under `fido2-vault.token2`.
 
-**Settings:** only the auto-lock time, in `settings.json` in the app's config folder
-(`com.token2.fidoparole`). Nothing secret.
+**Firefox bridge:** the relay forwards each request unchanged, one request per
+connection, framed like Firefox's native messaging (4-byte native-endian length +
+JSON). It connects to `\\.\pipe\fidoparole-bridge-<session id>` on Windows, or
+`$XDG_RUNTIME_DIR/fidoparole/bridge.sock` on Linux / macOS (inside a Flatpak:
+`$XDG_RUNTIME_DIR/app/<app id>/fidoparole-bridge.sock`). Requests are `status`,
+`list {origin}` and `fill {origin, id}`. The pipe's DACL grants your SID and SYSTEM,
+and it carries a Medium integrity label, so the relay Firefox starts can reach an app
+that runs as administrator. The host name is `com.token2.fidoparole`; only the
+extension id `fidoparole@token2.com` may use it.
+
+**Settings:** the auto-lock time and whether Firefox autofill is on, in
+`settings.json` in the app's config folder (`com.token2.fidoparole`). Nothing secret.
+On Windows, *Register with Firefox* also writes `firefox-native-host.json` there.
 
 ## Troubleshooting
 
@@ -279,6 +363,11 @@ under `fido2-vault.token2`.
 | "does not fit" when saving | The key's largeBlob storage is full. Shorten notes, delete old entries, or remove other vaults on the key. |
 | "This key holds no saved data for this vault" | The credential exists but its data is missing (never saved, or the key's largeBlob storage was reset). Don't save. Restore from a backup or open the vault from another key. |
 | Opening a vault made with an early test build fails | Builds before the PRF-style salt used a different salt. Restore from a backup file. |
+| Firefox: "FidoParole isn't set up for Firefox yet" | In the app: gear icon → *Register with Firefox*. Check that `fidoparole-bridge` is in the app's folder. |
+| Firefox: "FidoParole is not running" | Start the app. On Windows, a second copy can't take over the connection: close all copies and start one. |
+| Firefox: "No login for …" | Put the site's address in the entry's **Website** field (see [Which logins are offered](#which-logins-are-offered)). |
+| Flatpak Firefox finds nothing | Install Flatpak Firefox first, then press *Register* (it needs its own registration). Build the relay static (`rustup target add x86_64-unknown-linux-musl`, then `./build.sh`). |
+| Firefox can't start the relay on a system without a desktop portal | If `widget.use-xdg-desktop-portal.native-messaging` is set to `1` in `about:config`, set it to `0`. |
 
 Debug log: start with `T2_FIDO_LOG=<file>` (libfido2 trace to a file; it contains
 protocol hex dumps, so delete it afterwards) or `FIDO_DEBUG=1` (to stderr).
@@ -295,8 +384,9 @@ cd fidoparole
 .\build.cmd -RebuildFido2    # force a fresh libfido2 build
 ```
 
-Output: `dist\fidoparole\` with `fidoparole.exe`, `fido2.dll` and the cbor, libcrypto
-and zlib DLLs: a portable folder, no installer. Upstream libfido2 1.15.0 (USB HID only)
+Output: `dist\fidoparole\` with `fidoparole.exe`, `fidoparole-bridge.exe` (the Firefox
+relay), `fido2.dll` and the cbor, libcrypto and zlib DLLs: a portable folder, no
+installer. Upstream libfido2 1.15.0 (USB HID only)
 is cloned and built under `deps\` on the first run and reused afterwards.
 
 **Linux / macOS:**
@@ -311,12 +401,18 @@ Linux build needs: Rust, CMake, a C compiler, pkg-config, and the development
 packages for OpenSSL, libcbor, zlib, libudev and WebKitGTK 4.1 (Tauri 2). macOS:
 Xcode command-line tools and `brew install openssl@3 libcbor cmake pkg-config`.
 
+The Firefox relay (`bridge/`) is built along with the app and copied next to it. For
+Flatpak Firefox it has to be fully static: install the musl target once
+(`rustup target add x86_64-unknown-linux-musl`, or `aarch64-unknown-linux-musl` on
+ARM) and `build.sh` uses it.
+
 **Without a key:** a debug build started with `FIDOPAROLE_DEMO=1` opens a throw-away
 in-memory vault for UI work (saving fails by design).
 
-**Tests:** `cargo test` in `src-tauri` (vault format, KDF, backups, generator). Set
-`FIDO2_LIB_DIR` to the built libfido2 (`deps/libfido2/build/src`) and
-`FIDO2_LINK_STATIC=1`, as `build.sh` does.
+**Tests:** `cargo test` in `src-tauri` (vault format, KDF, backups, generator, which
+logins match a page). Set `FIDO2_LIB_DIR` to the built libfido2
+(`deps/libfido2/build/src`) and `FIDO2_LINK_STATIC=1`, as `build.sh` does.
+`cargo test` in `bridge` (framing, pipe and socket paths) needs nothing extra.
 
 ## Project layout
 
@@ -326,6 +422,9 @@ fidoparole/
   src-tauri/
     src/main.rs       Tauri setup, command registration
     src/commands.rs   session state, settings, all commands (the decrypted vault lives here)
+    src/bridge.rs     Firefox autofill: pipe / socket server, status / list / fill,
+                      Firefox registration (incl. Flatpak)
+    src/urlmatch.rs   which entries belong to a web page (+ tests)
     src/keyops.rs     vault operations on a key: unlock, create, write, reconnect, delete
     src/fido.rs       libfido2 FFI: devices, getInfo, makeCredential, getAssertion
                       (hmac-secret, largeBlobKey), largeBlobs, touch-to-pick
@@ -333,6 +432,9 @@ fidoparole/
     src/platform.rs   elevation check, USB serial lookup, core-dump opt-out
     build.rs          links libfido2 (FIDO2_LIB_DIR, FIDO2_LIB_NAME, FIDO2_LINK_STATIC)
     icons/            app icon (icon.png 512 px, icon.ico 16–256 px)
+  bridge/             fidoparole-bridge, the relay Firefox starts (separate crate, std only;
+                      src/proto.rs: framing and endpoints, shared with the app)
+  firefox-extension/  the Firefox extension: manifest, background, popup
   assets/logo/        logo: mark.svg, wordmark.svg (+ dark variants and PNG exports)
   build.ps1 / .cmd    Windows portable build
   build.sh            Linux / macOS build
@@ -347,4 +449,5 @@ fidoparole/
 - largeBlob storage is small (a few KB on most keys): passwords and short notes, not
   files or attachments.
 - USB only, no NFC. On Windows, administrator rights are required.
-- No browser autofill: copy and paste, with automatic clipboard clearing.
+- Browser autofill is Firefox only, and fill only (see [Limits of autofill](#limits-of-autofill)).
+  Elsewhere: copy and paste, with automatic clipboard clearing.
