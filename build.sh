@@ -3,6 +3,10 @@
 #
 # Builds upstream libfido2 $LIBFIDO2_TAG (USB HID only) and links it
 # statically, so the binary never picks up a different system libfido2.
+# Also builds fidoparole-bridge, the relay Firefox starts for autofill
+# (bridge/). On Linux it is built fully static (musl) when that Rust target
+# is installed, so the Flatpak build of Firefox can run it in its sandbox:
+#   rustup target add "$(uname -m)-unknown-linux-musl"
 #
 # Prerequisites
 #   Debian/Ubuntu: sudo apt install build-essential cmake pkg-config git \
@@ -60,16 +64,33 @@ if [[ "$(uname)" == "Darwin" ]]; then
   export RUSTFLAGS="${RUSTFLAGS:-} -L $(brew --prefix openssl@3)/lib -L $(brew --prefix libcbor)/lib"
 fi
 
+step "Firefox autofill relay (fidoparole-bridge)"
+BRIDGE_TARGET="$ROOT/bridge/target"
+RELAY_ARGS=(--release --manifest-path "$ROOT/bridge/Cargo.toml" --target-dir "$BRIDGE_TARGET")
+MUSL="$(uname -m)-unknown-linux-musl"
+if [[ "$(uname)" == "Linux" ]] && rustup target list --installed 2>/dev/null | grep -qx "$MUSL"; then
+  RUSTFLAGS="" cargo build "${RELAY_ARGS[@]}" --target "$MUSL"
+  RELAY="$BRIDGE_TARGET/$MUSL/release/fidoparole-bridge"
+else
+  if [[ "$(uname)" == "Linux" ]]; then
+    printf '\033[33mNote: the relay is built without musl. It works with deb/tarball and snap Firefox,\n'
+    printf 'but Flatpak Firefox needs the static build: rustup target add %s\033[0m\n' "$MUSL"
+  fi
+  cargo build "${RELAY_ARGS[@]}"
+  RELAY="$BRIDGE_TARGET/release/fidoparole-bridge"
+fi
+
 cd "$HERE/src-tauri"
 if [[ $DEV == 1 ]]; then
   step "Debug build"
   cargo build
+  cp "$RELAY" "${CARGO_TARGET_DIR:-target}/debug/"
   exec "${CARGO_TARGET_DIR:-target}/debug/fidoparole"
 fi
 step "Release build"
 cargo build --release
 mkdir -p "$ROOT/dist/fidoparole"
-cp "${CARGO_TARGET_DIR:-target}/release/fidoparole" "$ROOT/dist/fidoparole/"
+cp "${CARGO_TARGET_DIR:-target}/release/fidoparole" "$RELAY" "$ROOT/dist/fidoparole/"
 echo
-echo "Built: $ROOT/dist/fidoparole/fidoparole"
+echo "Built: $ROOT/dist/fidoparole/fidoparole (+ fidoparole-bridge for Firefox autofill)"
 [[ "$(uname)" == "Linux" ]] && echo "Linux: install the usual FIDO udev rules so your user can open the key's HID device." || true

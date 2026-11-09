@@ -5,6 +5,9 @@
   USB HID only, built here). Windows only allows FIDO HID access to elevated
   programs, so run fidoparole.exe as administrator.
 
+  Also builds fidoparole-bridge.exe, the relay Firefox starts for autofill
+  (bridge\), and puts it next to fidoparole.exe.
+
   Usage (PowerShell, from this folder):
       Set-ExecutionPolicy -Scope Process Bypass
       .\build.ps1                 # release, portable folder in .\dist\fidoparole
@@ -98,12 +101,19 @@ $env:FIDO2_LIB_DIR  = $FidoLibDir
 $env:FIDO2_LIB_NAME = "fido2"
 if ($env:CARGO_TARGET_DIR) { $Target = $env:CARGO_TARGET_DIR } else { $Target = "target" }
 
+Step "Firefox autofill relay (fidoparole-bridge)"
+$BridgeTarget = Join-Path $Here "bridge\target"
+cargo build --release --manifest-path (Join-Path $Here "bridge\Cargo.toml") --target-dir $BridgeTarget
+if ($LASTEXITCODE) { throw "relay build failed" }
+$Relay = Join-Path $BridgeTarget "release\fidoparole-bridge.exe"
+
 Push-Location $App
 try {
     if ($Dev) {
         Step "Debug build"
         New-Item -ItemType Directory -Force "$Target\debug" | Out-Null
         $RuntimeDlls | ForEach-Object { Copy-Item $_ "$Target\debug\" -Force }
+        Copy-Item $Relay "$Target\debug\" -Force
         cargo build
         if ($LASTEXITCODE) { throw "build failed" }
         & "$Target\debug\fidoparole.exe"
@@ -113,6 +123,7 @@ try {
         if ($LASTEXITCODE) { throw "build failed" }
         New-Item -ItemType Directory -Force $Portable | Out-Null
         Copy-Item "$Target\release\fidoparole.exe" $Portable -Force
+        Copy-Item $Relay $Portable -Force
         $RuntimeDlls | ForEach-Object { Copy-Item $_ $Portable -Force }
         Write-Host "`nPortable build ready: $Portable" -ForegroundColor Green
         Write-Host "Run fidoparole.exe as administrator (right-click > Run as administrator): Windows only allows FIDO HID access to elevated programs."

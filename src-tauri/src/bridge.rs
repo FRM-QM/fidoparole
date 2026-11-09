@@ -244,7 +244,7 @@ fn start_flatpak(app: &AppHandle, id: &'static str) {
         g.flatpak.push(id.to_string());
     }
     let path = proto::flatpak_socket_path(&proto::Env::current(), id);
-    spawn_listener(app, format!("Firefox (Flatpak) connection"), unix::serve(app.clone(), path));
+    spawn_listener(app, "Firefox (Flatpak) connection".into(), unix::serve(app.clone(), path));
 }
 
 #[cfg(windows)]
