@@ -739,18 +739,53 @@ async function submitDelete(ev) {
 
 function openSettings() {
   $("#set-lock").value = String(st.vault?.lockMinutes ?? st.env.lockMinutes ?? 5);
+  $("#ff-err").textContent = "";
+  renderBrowser(null);
   const d = $("#dlg-settings");
   d.returnValue = "";
   d.onclose = () => {
     if (d.returnValue !== "ok") return;
     const m = +$("#set-lock").value;
+    const ff = $("#set-ff").checked;
     attempt(async () => {
       await call("set_lock_minutes", { minutes: m });
       if (st.vault) st.vault.lockMinutes = m;
-      toast(`Auto-lock after ${m} min`);
+      const was = st.browser?.enabled;
+      if (st.browser && ff !== was) {
+        st.browser = await call("set_browser_autofill", { enabled: ff });
+        toast(ff ? "Firefox autofill is on" : "Firefox autofill is off");
+      } else {
+        toast(`Auto-lock after ${m} min`);
+      }
     });
   };
   d.showModal();
+  attempt(async () => renderBrowser(await call("browser_status"), true));
+}
+
+/** Firefox autofill part of the settings. `setCheck`: take the checkbox from `s`
+ *  (on open), not after "Register", which must not undo an unapplied change. */
+function renderBrowser(s, setCheck = false) {
+  st.browser = s;
+  const box = $("#ff-targets");
+  $("#set-ff").disabled = !s;
+  if (!s) { box.innerHTML = `<span class="hint">Checking…</span>`; return; }
+  if (setCheck) $("#set-ff").checked = s.enabled;
+  box.innerHTML = s.targets.map((t) => `<div class="ff-target">
+      <span class="chip ${t.registered ? "ok" : ""}">${t.registered ? "✓ Registered" : "Not registered"}</span><span>${esc(t.label)}</span></div>
+      ${t.warning ? `<p class="ff-warn">${esc(t.warning)}</p>` : ""}`).join("");
+  const all = s.targets.length && s.targets.every((t) => t.registered);
+  $("#ff-register").textContent = all ? "Register again" : "Register with Firefox";
+  $("#ff-err").textContent = s.errors.map(capital).join("\n");
+}
+
+async function registerFirefox() {
+  $("#ff-err").textContent = "";
+  try {
+    const s = await call("register_firefox_host");
+    renderBrowser(s);
+    toast("Registered with Firefox");
+  } catch (e) { $("#ff-err").textContent = capital(e); }
 }
 
 /** Read the environment and show the administrator warning on Windows. */
@@ -799,6 +834,7 @@ function wire() {
     if (p) { rcTarget = p; renderReconnectDevices(); }
   };
   $("#btn-settings").onclick = openSettings;
+  $("#ff-register").onclick = registerFirefox;
   $("#btn-elevate").onclick = () => attempt(async () => {
     if (st.vault?.dirty && !(await confirmDlg("Discard unsaved changes?", "Restarting closes the vault.", "Restart anyway", true))) return;
     await call("restart_as_admin");
@@ -869,6 +905,8 @@ function wire() {
 
   listen("vault-locked", (e) => { showLocked(); refreshDevices(); toast(e.payload || "Locked"); });
   listen("clipboard-cleared", () => toast("Clipboard cleared"));
+  // Every login handed to Firefox is shown, so a fill never goes unnoticed.
+  listen("bridge-fill", (e) => toast(`Firefox: filled “${e.payload?.title || "a login"}” on ${e.payload?.host || "a page"}`));
   listen("key-step", (e) => { const s = keySteps?.[e.payload]; if (s) setProgress(...s); });
   // The touch overlay can't be dismissed with Esc; the key operation keeps running.
   $("#progress").addEventListener("cancel", (e) => e.preventDefault());

@@ -1,0 +1,55 @@
+/* FidoParole popup — the app's tokens (brand #f23058, ink #16181d). */
+:root {
+  --ink: #16181d;
+  --ink-soft: #5b636e;
+  --bg: #ffffff;
+  --bg-soft: #f5f7f9;
+  --border: #e4e7eb;
+  --brand: #f23058;
+  --brand-tint: #ffe0e7;
+  --danger: #c01048;
+  color-scheme: light dark;
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #eceef1;
+    --ink-soft: #a3abb6;
+    --bg: #1c1e23;
+    --bg-soft: #272a31;
+    --border: #353943;
+    --brand-tint: #4a1d29;
+    --danger: #ff6b8b;
+  }
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; width: 320px; background: var(--bg); }
+[hidden] { display: none !important; }
+
+header { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.mark { width: 22px; height: 22px; }
+.name { font-weight: 600; }
+.badge { margin-left: auto; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+  background: var(--bg-soft); border: 1px solid var(--border); color: var(--ink-soft);
+  max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+main { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 8px; }
+.state { margin: 0; font-weight: 500; }
+.hint { margin: 0; color: var(--ink-soft); font-size: 12.5px; }
+.error { margin: 0; color: var(--danger); font-size: 12.5px; }
+
+.list { display: flex; flex-direction: column; gap: 2px; margin: 0 -6px; max-height: 320px; overflow-y: auto; }
+.ent { display: grid; grid-template-columns: 32px 1fr; gap: 10px; align-items: center; width: 100%;
+  padding: 7px 8px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit;
+  text-align: left; cursor: pointer; }
+.ent:hover, .ent:focus-visible { background: var(--bg-soft); outline: none; }
+.ent:focus-visible { box-shadow: inset 0 0 0 2px var(--brand); }
+.ent:disabled { opacity: 0.55; cursor: default; }
+.av { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center;
+  font-weight: 700; color: var(--brand); background: var(--brand-tint); }
+.t { display: flex; flex-direction: column; min-width: 0; }
+.t b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t small { color: var(--ink-soft); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

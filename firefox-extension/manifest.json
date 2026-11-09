@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "FidoParole",
+  "version": "0.1.0",
+  "description": "Fill logins from the FidoParole vault on your FIDO2 security key. Needs the FidoParole app, with the vault unlocked.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "fidoparole@token2.com",
+      "strict_min_version": "128.0",
+      "data_collection_permissions": { "required": ["none"] }
+    }
+  },
+  "permissions": ["nativeMessaging", "activeTab", "scripting"],
+  "background": { "scripts": ["background.js"] },
+  "action": {
+    "default_title": "FidoParole",
+    "default_popup": "popup/popup.html",
+    "default_icon": "icons/mark.svg"
+  },
+  "icons": { "48": "icons/mark.svg", "96": "icons/mark.svg" },
+  "commands": {
+    "fill-login": {
+      "suggested_key": { "default": "Alt+Shift+F" },
+      "description": "Fill the login for this site (opens the list when there are several)"
+    }
+  }
+}

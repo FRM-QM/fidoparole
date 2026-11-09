@@ -269,6 +269,13 @@
         <option value="30">30 minutes</option><option value="60">1 hour</option>
       </select>
     </label>
+    <hr class="dlg-sep">
+    <h3>Firefox autofill</h3>
+    <p class="hint">With the FidoParole extension, Firefox offers the logins whose Website matches the page you are on, while a vault is unlocked here. A password leaves this app only when you pick a login in Firefox, and each fill is shown here.</p>
+    <label class="check"><input type="checkbox" id="set-ff"> Let the Firefox extension fill logins</label>
+    <div id="ff-targets" class="ff-targets"></div>
+    <div class="row"><button type="button" id="ff-register" class="small">Register with Firefox</button><span class="hint">Tells Firefox where FidoParole is. Needed once per computer, and again after moving the app.</span></div>
+    <p id="ff-err" class="err"></p>
     <menu><button value="cancel" class="ghost">Cancel</button><button value="ok" class="primary">Apply</button></menu>
   </form>
 </dialog>
