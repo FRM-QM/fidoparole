@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "active": true,
+    "targets": ["appimage"],
+    "category": "Utility",
+    "shortDescription": "Password vault stored on a FIDO2 security key",
+    "linux": {
+      "appimage": { "bundleMediaFramework": false }
+    }
+  }
+}

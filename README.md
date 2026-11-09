@@ -311,6 +311,21 @@ Linux build needs: Rust, CMake, a C compiler, pkg-config, and the development
 packages for OpenSSL, libcbor, zlib, libudev and WebKitGTK 4.1 (Tauri 2). macOS:
 Xcode command-line tools and `brew install openssl@3 libcbor cmake pkg-config`.
 
+**Linux AppImage** (needs only Docker; runs from Linux, WSL or Git Bash with Docker
+Desktop):
+
+```bash
+./build-appimage.sh          # -> dist/FidoParole_0.1.0_amd64.AppImage
+```
+
+It builds in an Ubuntu 22.04 container and bundles WebKitGTK, GTK, libcbor and
+OpenSSL, so it runs on any distribution with glibc 2.35 or newer, including Fedora
+Atomic desktops (Silverblue, Kinoite) and Universal Blue (Bluefin, Aurora, Bazzite)
+**with nothing layered**. `chmod +x` it and start it. Without FUSE, start it with
+`--appimage-extract-and-run`. Fedora already gives the logged-in user access to FIDO
+keys, so no udev rule is needed there. The build caches libfido2 and the Rust build in
+Docker volumes (`fidoparole-appimage-*`).
+
 **Without a key:** a debug build started with `FIDOPAROLE_DEMO=1` opens a throw-away
 in-memory vault for UI work (saving fails by design).
 
@@ -335,7 +350,9 @@ fidoparole/
     icons/            app icon (icon.png 512 px, icon.ico 16–256 px)
   assets/logo/        logo: mark.svg, wordmark.svg (+ dark variants and PNG exports)
   build.ps1 / .cmd    Windows portable build
-  build.sh            Linux / macOS build
+  build.sh            Linux / macOS build (--appimage: AppImage on a Linux host)
+  build-appimage.sh   Linux AppImage, built in Docker
+  packaging/appimage/ Dockerfile and in-container build script for it
 ```
 
 ## Limits

@@ -10,18 +10,21 @@
 #                  libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev
 #   macOS:         brew install cmake pkg-config libcbor openssl@3
 #   Rust:          https://rustup.rs
+#   --appimage:    also the Tauri CLI (cargo install tauri-cli --version '^2' --locked),
+#                  file and patchelf. build-appimage.sh does all of this in Docker.
 #
-# Usage: ./build.sh [--dev] [--rebuild-fido2]
+# Usage: ./build.sh [--dev | --appimage] [--rebuild-fido2]
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$HERE"
 TAG="${LIBFIDO2_TAG:-1.15.0}"
 FIDO="$ROOT/deps/libfido2"
-DEV=0; REBUILD=0
+DEV=0; REBUILD=0; APPIMAGE=0
 for a in "$@"; do
   case "$a" in
     --dev) DEV=1 ;;
+    --appimage) APPIMAGE=1 ;;
     --rebuild-fido2) REBUILD=1 ;;
     *) echo "unknown option $a"; exit 2 ;;
   esac
@@ -65,6 +68,23 @@ if [[ $DEV == 1 ]]; then
   step "Debug build"
   cargo build
   exec "${CARGO_TARGET_DIR:-target}/debug/fidoparole"
+fi
+if [[ $APPIMAGE == 1 ]]; then
+  [[ "$(uname)" == "Linux" ]] || { echo "--appimage needs Linux (or use ./build-appimage.sh)"; exit 2; }
+  cargo tauri --version >/dev/null 2>&1 || {
+    echo "Tauri CLI not found: cargo install tauri-cli --version '^2' --locked"; exit 2; }
+  step "AppImage build"
+  # linuxdeploy and its plugins are AppImages themselves; without FUSE (e.g. in
+  # Docker) they have to extract themselves to run.
+  export APPIMAGE_EXTRACT_AND_RUN=1
+  BUNDLE="${CARGO_TARGET_DIR:-target}/release/bundle/appimage"
+  rm -rf "$BUNDLE"
+  cargo tauri build --bundles appimage --config tauri.appimage.conf.json
+  mkdir -p "$ROOT/dist"
+  cp "$BUNDLE"/*.AppImage "$ROOT/dist/"
+  echo
+  for f in "$BUNDLE"/*.AppImage; do echo "Built: $ROOT/dist/$(basename "$f")"; done
+  exit 0
 fi
 step "Release build"
 cargo build --release

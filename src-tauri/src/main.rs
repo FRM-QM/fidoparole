@@ -19,6 +19,12 @@ use commands::*;
 use std::sync::Mutex;
 
 fn main() {
+    // AppImage: the bundled WebKitGTK's DMA-BUF renderer shows a blank window with
+    // some host GPU drivers (notably Nvidia on Wayland). Set it to 0 to re-enable.
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("APPIMAGE").is_some() && std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
     platform::harden_process();
     let state = AppState(Mutex::new(Inner::default()));
     #[cfg(debug_assertions)]
