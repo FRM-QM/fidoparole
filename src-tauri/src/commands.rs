@@ -5,6 +5,7 @@
 //! (`reveal_password`) or while typing a new one. Copying a password to the
 //! clipboard happens in Rust, so it never enters the page at all.
 
+use crate::bridge;
 use crate::fido::{self, DeviceEntry, KeyInfo, VaultCredential};
 use crate::keyops::{self, Unlocked};
 use crate::vault::{self, Entry, GenOptions, VaultData};
@@ -25,10 +26,10 @@ pub struct Session {
     /// HID path of the key the vault came from.
     path: String,
     device: String,
-    cred: VaultCredential,
+    pub(crate) cred: VaultCredential,
     /// Kept while unlocked so "Save to key" doesn't ask again; wiped on lock.
     pin: Option<Zeroizing<String>>,
-    data: VaultData,
+    pub(crate) data: VaultData,
     dirty: bool,
     /// Bumped on every change; a save only clears `dirty` if nothing changed
     /// while the key was being written.
@@ -47,21 +48,24 @@ pub struct Session {
 }
 
 /// Persisted preferences (settings.json in the app's config directory).
-/// Nothing secret: only the auto-lock time.
+/// Nothing secret: the auto-lock time and whether Firefox may fill logins.
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
     pub lock_minutes: u64,
+    /// Answer the FidoParole Firefox extension (see bridge.rs). Off until the
+    /// user turns it on.
+    pub browser_autofill: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { lock_minutes: 5 }
+        Settings { lock_minutes: 5, browser_autofill: false }
     }
 }
 
 pub struct Inner {
-    session: Option<Session>,
+    pub(crate) session: Option<Session>,
     pending: Option<(Unlocked, Option<Zeroizing<String>>)>,
     copied: Option<(Unlocked, Option<Zeroizing<String>>)>,
     devices: Vec<DeviceEntry>,
@@ -71,7 +75,7 @@ pub struct Inner {
     clip_gen: u64,
     /// SHA-256 of what we last put on the clipboard, so we only ever clear our own text.
     clip_hash: Option<[u8; 32]>,
-    settings: Settings,
+    pub(crate) settings: Settings,
     settings_path: Option<PathBuf>,
 }
 
@@ -85,6 +89,11 @@ impl Default for Inner {
 }
 
 impl Inner {
+    /// Reset the auto-lock timer (what every command does via AppState::lock).
+    pub(crate) fn mark_activity(&mut self) {
+        self.last_activity = Instant::now();
+    }
+
     fn save_settings(&self) {
         if let Some(p) = &self.settings_path {
             if let Some(dir) = p.parent() { let _ = std::fs::create_dir_all(dir); }
@@ -687,6 +696,32 @@ pub fn set_lock_minutes(state: State<'_, AppState>, minutes: u64) -> R<()> {
     g.settings.lock_minutes = g.lock_minutes;
     g.save_settings();
     Ok(())
+}
+
+// ------------------------------------------------------- Firefox autofill ---
+
+#[tauri::command]
+pub fn browser_status(app: AppHandle, state: State<'_, AppState>) -> R<bridge::BrowserStatus> {
+    let enabled = state.lock()?.settings.browser_autofill;
+    Ok(bridge::status(&app, enabled))
+}
+
+#[tauri::command]
+pub fn set_browser_autofill(app: AppHandle, state: State<'_, AppState>, enabled: bool) -> R<bridge::BrowserStatus> {
+    {
+        let mut g = state.lock()?;
+        g.settings.browser_autofill = enabled;
+        g.save_settings();
+    }
+    Ok(bridge::status(&app, enabled))
+}
+
+/// Write Firefox's native-messaging manifest(s) pointing at the relay.
+#[tauri::command]
+pub fn register_firefox_host(app: AppHandle, state: State<'_, AppState>) -> R<bridge::BrowserStatus> {
+    bridge::register(&app)?;
+    let enabled = state.lock()?.settings.browser_autofill;
+    Ok(bridge::status(&app, enabled))
 }
 
 // --------------------------------------------------------------- backups ----

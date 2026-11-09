@@ -9,10 +9,12 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod bridge;
 mod commands;
 mod fido;
 mod keyops;
 mod platform;
+mod urlmatch;
 mod vault;
 
 use commands::*;
@@ -28,9 +30,12 @@ fn main() {
     tauri::Builder::default()
         .manage(state)
         .manage(Clip(Mutex::new(None)))
+        .manage(bridge::BridgeInfo::default())
         .setup(|app| {
             load_settings(app.handle());
             start_idle_watch(app.handle().clone());
+            // Firefox autofill: answers only once the user turns it on.
+            bridge::start(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -56,6 +61,9 @@ fn main() {
             lock,
             activity,
             set_lock_minutes,
+            browser_status,
+            set_browser_autofill,
+            register_firefox_host,
             export_backup,
             pick_backup_file,
             import_backup,

@@ -31,8 +31,10 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.11.0"
 tauri = "2"
+tokio = { version = "1", features = ["net", "io-util", "time"] }
+url = "2"
 uuid = { version = "1.28.0", features = ["v4"] }
 zeroize = { version = "1.9.1", features = ["serde", "derive"] }
 
 [target."cfg(windows)".dependencies]
-windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Security", "Win32_Devices_HumanInterfaceDevice", "Win32_Storage_FileSystem", "Win32_System_Threading", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Devices_HumanInterfaceDevice", "Win32_Storage_FileSystem", "Win32_System_Registry", "Win32_System_Threading", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }

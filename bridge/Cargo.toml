@@ -1,0 +1,25 @@
+[package]
+name = "fidoparole-bridge"
+version = "0.1.0"
+description = "Firefox native-messaging relay for FidoParole: forwards autofill requests to the running app"
+authors = ["Token2"]
+edition = "2021"
+
+# Deliberately its own crate: src-tauri's build script links libfido2 and
+# Tauri into every binary of that package, and this relay must stay a small,
+# dependency-free (on Linux: fully static) program that also runs inside the
+# Flatpak Firefox sandbox.
+
+[[bin]]
+name = "fidoparole-bridge"
+path = "src/main.rs"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+opt-level = "s"
+panic = "abort"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

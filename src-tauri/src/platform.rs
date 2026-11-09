@@ -32,6 +32,34 @@ pub fn is_elevated() -> bool {
     true
 }
 
+/// Windows: this process's user SID as a string ("S-1-5-21-…"), for the
+/// browser bridge pipe's access list. Elevation keeps the user SID.
+#[cfg(windows)]
+pub fn user_sid_string() -> Option<String> {
+    use windows::core::PWSTR;
+    use windows::Win32::Foundation::{CloseHandle, LocalFree, HANDLE, HLOCAL};
+    use windows::Win32::Security::Authorization::ConvertSidToStringSidW;
+    use windows::Win32::Security::{GetTokenInformation, TokenUser, TOKEN_QUERY, TOKEN_USER};
+    use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+    unsafe {
+        let mut token = HANDLE::default();
+        OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).ok()?;
+        let mut need = 0u32;
+        let _ = GetTokenInformation(token, TokenUser, None, 0, &mut need);
+        // u64 storage keeps the TOKEN_USER struct aligned.
+        let mut buf = vec![0u64; (need as usize).div_ceil(8).max(1)];
+        let ok = GetTokenInformation(token, TokenUser, Some(buf.as_mut_ptr() as *mut _), (buf.len() * 8) as u32, &mut need).is_ok();
+        let _ = CloseHandle(token);
+        if !ok { return None; }
+        let user = &*(buf.as_ptr() as *const TOKEN_USER);
+        let mut s = PWSTR::null();
+        ConvertSidToStringSidW(user.User.Sid, &mut s).ok()?;
+        let out = s.to_string().ok();
+        let _ = LocalFree(Some(HLOCAL(s.0 as *mut _)));
+        out
+    }
+}
+
 /// Best effort: keep the process out of core dumps (Linux/macOS), so the
 /// decrypted vault can't end up on disk through a crash dump.
 pub fn harden_process() {

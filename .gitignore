@@ -1,6 +1,7 @@
 /deps/
 /dist/
 src-tauri/target/
+bridge/target/
 *.log
 .DS_Store
 Thumbs.db
