@@ -291,6 +291,9 @@ pub struct DeviceEntry {
     pub aaguid: String,
     pub fw_version: String,
     pub fingerprint: Option<bool>,
+    /// The key's own name, given with Keyroost and stored in its largeBlob
+    /// array. When set, `label` holds it too.
+    pub key_name: Option<String>,
 }
 
 /// FIDO HID devices only. Smart-card / NFC (PC/SC) entries are skipped: the
@@ -317,7 +320,7 @@ pub fn list_devices() -> R<Vec<DeviceEntry>> {
         let serial = crate::platform::usb_serial(&path).unwrap_or_default();
         out.push(DeviceEntry {
             path, label, product, manufacturer, vendor_id, product_id, usable, note, serial,
-            aaguid: String::new(), fw_version: String::new(), fingerprint: None,
+            aaguid: String::new(), fw_version: String::new(), fingerprint: None, key_name: None,
         });
     }
     let mut l = list;
@@ -332,9 +335,29 @@ pub fn list_devices() -> R<Vec<DeviceEntry>> {
             d.aaguid = i.aaguid;
             d.fw_version = i.fw_version;
             d.fingerprint = Some(i.has_uv);
+            // A name given with Keyroost replaces the product name. Reading
+            // it needs no PIN or touch; without one the label stays as is.
+            if i.max_large_blob > 0 {
+                if let Some(name) = key_name(&d.path).ok().flatten() {
+                    d.label = name.clone();
+                    d.key_name = Some(name);
+                }
+            }
         }
     }
     Ok(out)
+}
+
+/// The key's own name as Keyroost stores it in the largeBlob array (see
+/// `keyname`). Needs no PIN or touch. Ok(None) when the key has none.
+pub fn key_name(path: &str) -> R<Option<String>> {
+    let dev = Dev::open(path)?;
+    let mut buf: *mut u8 = ptr::null_mut();
+    let mut len = 0usize;
+    rc(unsafe { fido_dev_largeblob_get_array(dev.0, &mut buf, &mut len) })?;
+    let array = copy_buf(buf, len);
+    unsafe { free_c(buf) };
+    Ok(crate::keyname::name_from_array(&array))
 }
 
 /// Make every listed key blink and wait for one to be touched; returns its

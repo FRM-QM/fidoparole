@@ -208,6 +208,9 @@ async function refreshDevices() {
   if (st.selected) loadInfo(st.selected); else renderKeyView();
 }
 
+/** The key's brand / product name (the title when the key carries no name of its own). */
+const brand = (d) => d.product || d.manufacturer || "";
+
 /** One line telling apart keys with the same product name. */
 function devDetails(d) {
   const bits = [];
@@ -227,9 +230,12 @@ function devButton(d, sel, opts = {}) {
     mine ? `<span class="badge sc">This vault's key</span>` : "",
   ].join("");
   const details = devDetails(d);
-  const title = [d.manufacturer, d.product, d.serial && `serial ${d.serial}`, d.aaguid && `AAGUID ${d.aaguid}`, d.fwVersion && `firmware ${d.fwVersion}`, d.path].filter(Boolean).join("\n");
+  // A key named with Keyroost shows that name as its title and its brand below.
+  const model = d.keyName ? brand(d) : "";
+  const title = [d.keyName && `Name: ${d.keyName}`, d.manufacturer, d.product, d.serial && `serial ${d.serial}`, d.aaguid && `AAGUID ${d.aaguid}`, d.fwVersion && `firmware ${d.fwVersion}`, d.path].filter(Boolean).join("\n");
   return `<button class="dev ${sel ? "sel" : ""}" data-path="${esc(d.path)}" title="${esc(title)}" ${d.usable && !opts.disabled ? "" : "disabled"}>
     <div class="top"><b>${esc(d.label)}</b><span class="badges">${badges}</span></div>
+    ${model ? `<small>${esc(model)}</small>` : ""}
     ${details ? `<small class="mono">${esc(details)}</small>` : ""}
     ${d.usable ? "" : `<small>${esc(d.note)}</small>`}</button>`;
 }
@@ -275,6 +281,9 @@ function renderKeyView() {
   $("#key-view").hidden = !dev;
   if (!dev) return;
   $("#kv-name").textContent = dev.label;
+  const model = dev.keyName ? brand(dev) : "";
+  $("#kv-model").textContent = model;
+  $("#kv-model").hidden = !model;
   const tb = $("#kv-transport");
   tb.className = "badge hid";
   tb.textContent = "USB HID";

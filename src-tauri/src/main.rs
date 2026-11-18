@@ -11,6 +11,7 @@
 
 mod commands;
 mod fido;
+mod keyname;
 mod keyops;
 mod platform;
 mod vault;

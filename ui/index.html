@@ -70,9 +70,12 @@
         <p class="hint">The vault is encrypted with a secret only the key can produce, stored in the key's own memory, and decrypted in memory only.</p>
       </div>
       <div id="key-view" hidden>
-        <div class="key-title">
-          <h1 id="kv-name">Security key</h1>
-          <span id="kv-transport" class="badge"></span>
+        <div class="key-head">
+          <div class="key-title">
+            <h1 id="kv-name">Security key</h1>
+            <span id="kv-transport" class="badge"></span>
+          </div>
+          <p id="kv-model" class="hint" hidden></p>
         </div>
         <div id="kv-chips" class="chips"></div>
         <div id="kv-problem" class="banner bad" hidden></div>
